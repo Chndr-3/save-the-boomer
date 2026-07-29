@@ -48,6 +48,24 @@ def load():
     return texts, labels
 
 
+# Flag fraud if P(fraud) >= threshold; otherwise pick the best of the rest.
+# Lower threshold = catch more fraud (higher recall), at the cost of precision.
+FRAUD_THRESHOLD = 0.30
+
+
+def predict_biased(clf, Xv, threshold):
+    proba = clf.predict_proba(Xv)
+    fraud_i = list(clf.classes_).index("fraud")
+    out = []
+    for p in proba:
+        if p[fraud_i] >= threshold:
+            out.append("fraud")
+        else:
+            best = max(range(len(p)), key=lambda i: p[i] if i != fraud_i else -1)
+            out.append(clf.classes_[best])
+    return out
+
+
 def main():
     texts, labels = load()
     X = [clean(t) for t in texts]
@@ -58,14 +76,30 @@ def main():
     vec = TfidfVectorizer(ngram_range=(1, 2), min_df=2)
     clf = MultinomialNB()
     clf.fit(vec.fit_transform(X_tr), y_tr)
-
-    pred = clf.predict(vec.transform(X_te))
+    Xte = vec.transform(X_te)
     order = ["ham", "promotion", "fraud"]
-    print("\n" + classification_report(y_te, pred, labels=order, digits=3, zero_division=0))
+
+    # sweep to show the trade-off (0.5 == plain argmax baseline)
+    from sklearn.metrics import precision_recall_fscore_support
+    print("\nfraud class vs threshold:")
+    print(f"{'thresh':>7} {'precision':>10} {'recall':>8} {'f1':>7}")
+    for th in [0.50, 0.40, 0.30, 0.20, 0.15, 0.10]:
+        p = predict_biased(clf, Xte, th)
+        pr, rc, f1, _ = precision_recall_fscore_support(
+            y_te, p, labels=["fraud"], zero_division=0
+        )
+        print(f"{th:>7.2f} {pr[0]:>10.3f} {rc[0]:>8.3f} {f1[0]:>7.3f}")
+
+    pred = predict_biased(clf, Xte, FRAUD_THRESHOLD)
+    print(f"\n=== chosen threshold {FRAUD_THRESHOLD} ===")
+    print(classification_report(y_te, pred, labels=order, digits=3, zero_division=0))
     print("confusion matrix (rows=true, cols=pred):", order)
     print(confusion_matrix(y_te, pred, labels=order))
 
-    joblib.dump({"vectorizer": vec, "model": clf}, "model.joblib")
+    joblib.dump(
+        {"vectorizer": vec, "model": clf, "fraud_threshold": FRAUD_THRESHOLD},
+        "model.joblib",
+    )
     print("\nsaved model.joblib")
 
 
