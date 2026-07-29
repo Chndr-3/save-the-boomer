@@ -1,0 +1,11 @@
+# Copy to samconfig.toml (gitignored) and fill in your values.
+# Nothing here is a secret, but it's account/personal-specific so it stays local.
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "save-the-boomer"
+region = "ap-southeast-1"
+resolve_s3 = true
+resolve_image_repos = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "AlertEmail=you@example.com"

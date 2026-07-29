@@ -5,3 +5,11 @@ venv/
 *.pkl
 *.joblib
 .ipynb_checkpoints/
+
+# AWS / SAM — never commit local config or secrets
+samconfig.toml
+.aws-sam/
+*.pem
+.env
+out.json
+env.json
