@@ -66,17 +66,28 @@ def predict_biased(clf, Xv, threshold):
     return out
 
 
+def top_words(clf, vec, n=12):
+    """Most indicative tokens per class, straight from the trained NB."""
+    feats = vec.get_feature_names_out()
+    for ci, cls in enumerate(clf.classes_):
+        logp = clf.feature_log_prob_[ci]
+        top = sorted(range(len(feats)), key=lambda i: logp[i], reverse=True)[:n]
+        print(f"  {cls:>9}: " + ", ".join(feats[i] for i in top))
+
+
 def main():
     texts, labels = load()
     X = [clean(t) for t in texts]
+    idx = list(range(len(X)))
 
-    X_tr, X_te, y_tr, y_te = train_test_split(
-        X, labels, test_size=0.2, random_state=42, stratify=labels
+    tr, te, y_tr, y_te = train_test_split(
+        idx, labels, test_size=0.2, random_state=42, stratify=labels
     )
+    X_tr = [X[i] for i in tr]
     vec = TfidfVectorizer(ngram_range=(1, 2), min_df=2)
     clf = MultinomialNB()
     clf.fit(vec.fit_transform(X_tr), y_tr)
-    Xte = vec.transform(X_te)
+    Xte = vec.transform([X[i] for i in te])
     order = ["ham", "promotion", "fraud"]
 
     # sweep to show the trade-off (0.5 == plain argmax baseline)
@@ -95,6 +106,15 @@ def main():
     print(classification_report(y_te, pred, labels=order, digits=3, zero_division=0))
     print("confusion matrix (rows=true, cols=pred):", order)
     print(confusion_matrix(y_te, pred, labels=order))
+
+    print("\n=== most indicative words per class ===")
+    top_words(clf, vec)
+
+    print("\n=== misclassified messages ===")
+    wrong = [(y_te[j], pred[j], texts[te[j]]) for j in range(len(te)) if y_te[j] != pred[j]]
+    print(f"{len(wrong)}/{len(te)} wrong")
+    for true, got, msg in wrong:
+        print(f"  [true={true:>9} pred={got:>9}] {msg[:90]}")
 
     joblib.dump(
         {"vectorizer": vec, "model": clf, "fraud_threshold": FRAUD_THRESHOLD},

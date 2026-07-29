@@ -36,6 +36,19 @@ The preprocessing pipeline handles Bahasa Indonesia text: lowercasing, tokenizat
 - **Base dataset:** [`Andikazidanef15/Sentiment-Analysis-on-Indonesian-SMS-Dataset`](https://github.com/Andikazidanef15/Sentiment-Analysis-on-Indonesian-SMS-Dataset) (~1,145 labeled SMS, originally from [`kmkurn/id-nlp-resource`](https://github.com/kmkurn/id-nlp-resource)). Note: it skews toward promotional spam.
 - **Our contribution:** a hand-collected, growing set of real Indonesian **fraud** SMS examples, with a documented labeling schema (`ham` / `promotion` / `fraud`).
 
+## Usage
+
+```bash
+pip install -r requirements.txt
+python train.py                      # trains, evaluates, writes model.joblib
+python predict.py "Selamat anda menang hadiah, transfer biaya admin ke..."
+```
+
+`train.py` also prints the most fraud/promo/ham-indicative words and dumps every
+misclassified test message — handy for spotting source-label errors and seeing
+*why* the model decides what it does. Fraud sensitivity is tunable via
+`FRAUD_THRESHOLD` in `train.py` (lower = catches more fraud, more false alarms).
+
 ## Roadmap (Phase 1)
 
 - [ ] Audit the base dataset's label quality and distribution
