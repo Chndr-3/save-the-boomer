@@ -49,6 +49,45 @@ misclassified test message — handy for spotting source-label errors and seeing
 *why* the model decides what it does. Fraud sensitivity is tunable via
 `FRAUD_THRESHOLD` in `train.py` (lower = catches more fraud, more false alarms).
 
+## AWS deployment (optional)
+
+An optional serverless stack lets you run the classifier as a live API. It's
+pure infrastructure-as-code (AWS SAM) — **no credentials ever live in this
+repo**; the Lambdas get their permissions from scoped IAM roles at runtime, and
+your personal config stays in a gitignored `samconfig.toml`.
+
+```
+SMS text ──▶ API Gateway ──▶ Classifier Lambda ──▶ DynamoDB (stores result)
+                              (TF-IDF + NB)      └─▶ SNS (emails you on fraud)
+
+S3 dataset ──▶ EventBridge (weekly) ──▶ Retrain Lambda ──▶ writes model back to S3
+```
+
+Both Lambdas are container images that **reuse `train.py`/`predict.py`**, so the
+deployed model can't drift from the one you validate locally.
+
+**Deploy:**
+```bash
+cp samconfig.toml.example samconfig.toml   # set your email + region
+sam build && sam deploy --guided           # first time; uses samconfig after
+
+# seed the bucket, then build the first model in-cloud:
+BUCKET=$(aws cloudformation describe-stacks --stack-name save-the-boomer \
+  --query "Stacks[0].Outputs[?OutputKey=='DataBucket'].OutputValue" --output text)
+aws s3 cp data/base_sms.csv  s3://$BUCKET/data/base_sms.csv
+aws s3 cp data/sms_fraud.csv s3://$BUCKET/data/sms_fraud.csv
+aws lambda invoke --function-name <RetrainFunction output> /dev/stdout
+
+# call it:
+curl -X POST "$(... ApiUrl output ...)" -d '{"text":"Selamat anda menang hadiah, transfer biaya admin..."}'
+```
+
+Confirm the SNS subscription email AWS sends you, or fraud alerts won't deliver.
+Tear it all down with `sam delete`.
+
+Requires: AWS CLI + SAM CLI + Docker, and AWS credentials configured **locally**
+(`aws configure`) — never in the repo.
+
 ## Roadmap (Phase 1)
 
 - [ ] Audit the base dataset's label quality and distribution

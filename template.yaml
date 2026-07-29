@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Save the Boomer - Indonesian SMS fraud classifier.
+  API Gateway -> Classifier Lambda -> DynamoDB + SNS, with a weekly retrain Lambda.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Email address that receives fraud alerts (confirm the SNS subscription email after deploy).
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+
+Resources:
+
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "save-the-boomer-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+
+  FraudTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref AlertEmail
+          Protocol: email
+
+  ClassifierFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: aws/classifier/Dockerfile
+      DockerContext: .
+      DockerTag: classifier
+    Properties:
+      PackageType: Image
+      Environment:
+        Variables:
+          MODEL_BUCKET: !Ref DataBucket
+          TABLE_NAME: !Ref ResultsTable
+          SNS_TOPIC_ARN: !Ref FraudTopic
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref DataBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ResultsTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt FraudTopic.TopicName
+      Events:
+        Classify:
+          Type: Api
+          Properties:
+            Path: /classify
+            Method: post
+
+  RetrainFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      Dockerfile: aws/retrain/Dockerfile
+      DockerContext: .
+      DockerTag: retrain
+    Properties:
+      PackageType: Image
+      MemorySize: 2048
+      Timeout: 300
+      Environment:
+        Variables:
+          MODEL_BUCKET: !Ref DataBucket
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DataBucket
+      Events:
+        Weekly:
+          Type: Schedule
+          Properties:
+            Schedule: rate(7 days)
+
+Outputs:
+  ApiUrl:
+    Description: POST endpoint for SMS classification
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/classify"
+  DataBucket:
+    Description: S3 bucket for dataset + model
+    Value: !Ref DataBucket
+  RetrainFunction:
+    Description: Retrain function name (invoke once after deploy to seed the model)
+    Value: !Ref RetrainFunction
