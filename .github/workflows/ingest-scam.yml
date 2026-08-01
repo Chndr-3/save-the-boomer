@@ -1,0 +1,63 @@
+name: Ingest scam report & retrain
+
+on:
+  issues:
+    types: [opened, edited]
+
+# ponytail: retrains + commits the model per accepted issue. If model-commit
+# churn gets noisy, move the retrain+commit steps to a weekly `schedule:` and
+# keep only the data append here.
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  ingest:
+    if: contains(github.event.issue.labels.*.name, 'scam-report')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: pip install -r requirements.txt
+
+      - name: Append report to dataset
+        id: ingest
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: python scripts/ingest.py
+
+      # --- from here only runs if ingest succeeded ---
+      - name: Retrain model
+        run: python train.py
+
+      - name: Commit dataset + retrained model
+        run: |
+          git config user.name "scam-bot"
+          git config user.email "actions@github.com"
+          git add data/sms_fraud.csv model.joblib
+          git commit -m "data: ingest scam report #${{ github.event.issue.number }} + retrain"
+          git push
+
+      - name: Thank & close issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: "✅ Added to the dataset and model retrained. Thank you for the report!"
+            });
+            await github.rest.issues.update({
+              ...context.repo, issue_number: context.issue.number, state: "closed"
+            });
+
+      - name: Report failure back to issue
+        if: failure() && steps.ingest.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: "⚠️ Could not add this report — check that the SMS text is filled in and the category is valid, then edit the issue to retry."
+            });

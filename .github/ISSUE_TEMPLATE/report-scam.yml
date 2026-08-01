@@ -1,0 +1,42 @@
+name: Report a scam SMS
+description: Submit a fraudulent Indonesian SMS to grow the training dataset
+title: "[scam] "
+labels: ["scam-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping protect people from SMS fraud! Paste the scam
+        message below and pick its category. A bot will add it to the dataset
+        and retrain the model automatically.
+        **Do not include real personal data** (names, account numbers) — replace
+        with placeholders like `1234567890`.
+  - type: textarea
+    id: sms_text
+    attributes:
+      label: Scam SMS text
+      description: The full message, as received.
+      placeholder: "[JNE] Paket anda tertahan di gudang, lengkapi di jne-cek.info dlm 24 jam"
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - fake_prize_lottery
+        - fake_courier
+        - impersonate_official
+        - fake_family_emergency
+        - fake_charity
+        - romance_scam
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes (optional)
+      description: Anything else — sender, how it arrived, etc.
+    validations:
+      required: false
