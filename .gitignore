@@ -4,6 +4,7 @@ __pycache__/
 venv/
 *.pkl
 *.joblib
+!model.joblib
 .ipynb_checkpoints/
 
 # AWS / SAM — never commit local config or secrets
