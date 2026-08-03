@@ -7,6 +7,8 @@ import os
 import re
 import sys
 
+from redact import redact
+
 CSV = "data/sms_fraud.csv"
 CATEGORIES = {
     "fake_prize_lottery", "fake_courier", "impersonate_official",
@@ -37,6 +39,7 @@ def main():
     if category not in CATEGORIES:
         sys.exit(f"Invalid category '{category}'. Allowed: {sorted(CATEGORIES)}")
     text = re.sub(r"\s+", " ", text).strip()  # collapse whitespace/newlines
+    text = redact(text)  # scrub phone numbers before storing (PII)
 
     with open(CSV, encoding="utf-8") as fh:
         existing = {row["text"].strip() for row in csv.DictReader(fh)}
